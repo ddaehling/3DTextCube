@@ -33,48 +33,54 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
             text.font = UIFont(name: "system", size: 16)
             text.flatness = 0.1
             
-            let textNode = CubeNode(id: index, geometry: text)
+            let textNode = SCNNode(geometry: text)
             
             let (minVec, maxVec) = textNode.boundingBox
-            textNode.pivot = SCNMatrix4MakeTranslation(minVec.x + (maxVec.x - minVec.x) / 2, minVec.y + (maxVec.y - minVec.y) / 2, 0)
-            boxNode.addChildNode(textNode)
-            textNode.scale = SCNVector3(x: 0.05, y: 0.05, z: 0.05)
-            
+            let pivotOffsetX = minVec.x + (maxVec.x - minVec.x) / 2
+            let pivotOffsetY = minVec.y + (maxVec.y - minVec.y) / 2
+            textNode.simdPivot = simd_float4x4([
+                simd_float4.init(x: 20, y: 0, z: 0, w: 0),
+                simd_float4.init(x: 0, y: 20, z: 0, w: 0),
+                simd_float4.init(x: 0, y: 0, z: 20, w: 0),
+                simd_float4.init(x: pivotOffsetX, y: pivotOffsetY, z: 0, w: 1)
+            ])
+
             // Create a reliable source for hit testing:
-            let plane = SCNBox(width: 1.8 / 0.05, height: 1.8 / 0.05, length: 0.01, chamferRadius: 0)
+            let plane = SCNBox(width: 1.8, height: 1.8, length: 0.01, chamferRadius: 0)
             plane.firstMaterial?.diffuse.contents = UIColor.clear
-            let planeNode = SCNNode(geometry: plane)
-            planeNode.transform = SCNMatrix4MakeTranslation(minVec.x + (maxVec.x - minVec.x) / 2, minVec.y + (maxVec.y - minVec.y) / 2, -0.0005)
-            textNode.addChildNode(planeNode)
+            let planeNode = CubeNode(id: index, geometry: plane)
+//            planeNode.transform = SCNMatrix4MakeTranslation(minVec.x + (maxVec.x - minVec.x) / 2, minVec.y + (maxVec.y - minVec.y) / 2, -0.0005)
+            planeNode.addChildNode(textNode)
+            planeNode.simdPivot = simd_float4x4([
+                simd_float4.init(x: 1, y: 0, z: 0, w: 0),
+                simd_float4.init(x: 0, y: 1, z: 0, w: 0),
+                simd_float4.init(x: 0, y: 0, z: 1, w: 0),
+                simd_float4.init(x: 0, y: 0, z: -1.001, w: 1)
+            ])
             
             switch index {
             case 0:
-                textNode.rotation = SCNVector4(x: 0, y: 0, z: 0, w: 0)
-                textNode.position = SCNVector3(x: 0, y: 0, z: 1.001)
+                planeNode.rotation = SCNVector4(x: 0, y: 0, z: 0, w: 0)
                 
             case 1:
-                textNode.rotation = SCNVector4(x: 0, y: 1, z: 0, w: .pi / 2)
-                textNode.position = SCNVector3(x: 1.001, y: 0, z: 0)
+                planeNode.rotation = SCNVector4(x: 0, y: 1, z: 0, w: .pi / 2)
+                
             case 2:
-                textNode.rotation = SCNVector4(x: 0, y: 1, z: 0, w: .pi)
-                textNode.position = SCNVector3(x: 0, y: 0, z: -1.001)
+                planeNode.rotation = SCNVector4(x: 0, y: 1, z: 0, w: .pi)
 
             case 3:
-                textNode.rotation = SCNVector4(x: 0, y: 1, z: 0, w: .pi * 3 / 2)
-                textNode.position = SCNVector3(x: -1.001, y: 0, z: 0)
+                planeNode.rotation = SCNVector4(x: 0, y: 1, z: 0, w: .pi * 3 / 2)
 
             case 4:
-                textNode.rotation = SCNVector4(x: 1, y: 0, z: 0, w: -.pi / 2)
-                textNode.position = SCNVector3(x: 0, y: 1.001, z: 0)
+                planeNode.rotation = SCNVector4(x: 1, y: 0, z: 0, w: -.pi / 2)
 
             case 5:
-                textNode.rotation = SCNVector4(x: 1, y: 0, z: 0, w: .pi / 2)
-                textNode.position = SCNVector3(x: 0, y: -1.001, z: 0)
+                planeNode.rotation = SCNVector4(x: 1, y: 0, z: 0, w: .pi / 2)
 
             default: break
             }
-//
-//            textNode.pivot = SCNMatrix4MakeTranslation(minVec.x, minVec.y, -1)
+            
+            scene.rootNode.addChildNode(planeNode)
 
         }
         
@@ -85,7 +91,7 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
             (.up, SCNVector3(x: 0, y: 10, z: 0))
         ]
         
-        context.coordinator.transforms = .init(uniqueKeysWithValues: boxNode.childNodes.filter { ($0 as! CubeNode).id != 0 && ($0 as! CubeNode).id != 2 }.map { node in
+        context.coordinator.transforms = .init(uniqueKeysWithValues: scene.rootNode.childNodes.filter { $0.name == nil && ($0 as! CubeNode).id != 0 && ($0 as! CubeNode).id != 2 }.map { node in
             guard let cubeNode = node as? CubeNode else { fatalError() }
             var direction : Direction = .undefined
             let transform = cubeNode.simdTransform
@@ -103,6 +109,7 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
             default:
                 break
             }
+            print("Transform created for Node \(cubeNode.id+1)")
             return (direction, targetTransform)
         })
         
@@ -138,6 +145,7 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
         let action = SCNAction.rotate(by: rotationValue, around: rotationAxis, duration: 0.3)
         action.timingMode = .easeInEaseOut
         
+        uiView.scene?.rootNode.childNodes.filter { $0.name == nil }.forEach { $0.runAction(action) }
         box.runAction(action) {
             print("----------- NEW ROTATION ------------")
             rotationValue = 0
@@ -147,12 +155,12 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
                 let origin = SCNVector3(x: 0, y: 0, z: 0)
                 guard
                     let hitTestResult = uiView.scene?.rootNode.hitTestWithSegment(from: origin, to: vector).first,
-                    let node = hitTestResult.node.parent as? CubeNode,
+                    let node = hitTestResult.node as? CubeNode,
                     let targetTransform = context.coordinator.transforms[direction]
                 else { return }
                 
-//                print(targetTransform)
-//                print("Node: Node \(node.id+1)")
+                node.simdTransform = targetTransform
+                
 //                node.simdTransform.columns.0 = targetTransform.columns.0
 //                node.simdTransform.columns.1 = targetTransform.columns.1
 //                node.simdTransform.columns.2 = targetTransform.columns.2
