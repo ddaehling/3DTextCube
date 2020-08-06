@@ -37,7 +37,7 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
             
             let (minVec, maxVec) = textNode.boundingBox
             textNode.pivot = SCNMatrix4MakeTranslation(minVec.x + (maxVec.x - minVec.x) / 2, minVec.y + (maxVec.y - minVec.y) / 2, 0)
-            scene.rootNode.addChildNode(textNode)
+            boxNode.addChildNode(textNode)
             textNode.scale = SCNVector3(x: 0.05, y: 0.05, z: 0.05)
             
             // Create a reliable source for hit testing:
@@ -55,8 +55,6 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
             case 1:
                 textNode.rotation = SCNVector4(x: 0, y: 1, z: 0, w: .pi / 2)
                 textNode.position = SCNVector3(x: 1.001, y: 0, z: 0)
-//                let clone = cloneNode(node: textNode, with: 1)
-//                scene.rootNode.addChildNode(clone)
             case 2:
                 textNode.rotation = SCNVector4(x: 0, y: 1, z: 0, w: .pi)
                 textNode.position = SCNVector3(x: 0, y: 0, z: -1.001)
@@ -64,20 +62,14 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
             case 3:
                 textNode.rotation = SCNVector4(x: 0, y: 1, z: 0, w: .pi * 3 / 2)
                 textNode.position = SCNVector3(x: -1.001, y: 0, z: 0)
-//                let clone = cloneNode(node: textNode, with: 3)
-//                scene.rootNode.addChildNode(clone)
 
             case 4:
                 textNode.rotation = SCNVector4(x: 1, y: 0, z: 0, w: -.pi / 2)
                 textNode.position = SCNVector3(x: 0, y: 1.001, z: 0)
-//                let clone = cloneNode(node: textNode, with: 4)
-//                scene.rootNode.addChildNode(clone)
 
             case 5:
                 textNode.rotation = SCNVector4(x: 1, y: 0, z: 0, w: .pi / 2)
                 textNode.position = SCNVector3(x: 0, y: -1.001, z: 0)
-//                let clone = cloneNode(node: textNode, with: 5)
-//                scene.rootNode.addChildNode(clone)
 
             default: break
             }
@@ -92,11 +84,8 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
             (.down, SCNVector3(x: 0, y: -10, z: 0)),
             (.up, SCNVector3(x: 0, y: 10, z: 0))
         ]
-//        
-//        let textNodes = scene.rootNode.childNodes.flatMap { $0.childNodes }
         
-        
-        context.coordinator.transforms = .init(uniqueKeysWithValues: scene.rootNode.childNodes.filter { $0.name != "Box" && ($0 as! CubeNode).id != 0 && ($0 as! CubeNode).id != 2 }.map { node in
+        context.coordinator.transforms = .init(uniqueKeysWithValues: boxNode.childNodes.filter { ($0 as! CubeNode).id != 0 && ($0 as! CubeNode).id != 2 }.map { node in
             guard let cubeNode = node as? CubeNode else { fatalError() }
             var direction : Direction = .undefined
             let transform = cubeNode.simdTransform
@@ -149,7 +138,6 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
         let action = SCNAction.rotate(by: rotationValue, around: rotationAxis, duration: 0.3)
         action.timingMode = .easeInEaseOut
         
-        uiView.scene?.rootNode.childNodes.filter { $0.name != "Box"}.forEach { $0.runAction(action)}
         box.runAction(action) {
             print("----------- NEW ROTATION ------------")
             rotationValue = 0
