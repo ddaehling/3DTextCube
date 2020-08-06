@@ -15,7 +15,9 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
     
     let cubeElements : [String] = ["1", "2", "3", "4", "5", "6"]
     
+    private let animationDuration : Double = 0.3
     
+    //Called only once when the view is created
     func makeUIView(context: UIViewRepresentableContext<SceneKitObjectRepresentable>) -> SCNView {
         let sceneView = SCNView()
         sceneView.frame = .zero
@@ -23,7 +25,7 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
         let scene = SCNScene()
         
         let box = SCNBox(width: 2, height: 2, length: 2, chamferRadius: 0.2)
-        box.firstMaterial?.diffuse.contents = UIColor.red.withAlphaComponent(0.3)
+        box.firstMaterial?.diffuse.contents = UIColor.white
         let boxNode = SCNNode(geometry: box)
         boxNode.name = "Box"
         
@@ -35,6 +37,7 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
             
             let textNode = SCNNode(geometry: text)
             
+            // Move the text's anchor point to its center (by default it's at the bottom left) and scale the text by 0.05
             let (minVec, maxVec) = textNode.boundingBox
             let pivotOffsetX = minVec.x + (maxVec.x - minVec.x) / 2
             let pivotOffsetY = minVec.y + (maxVec.y - minVec.y) / 2
@@ -49,7 +52,7 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
             let plane = SCNBox(width: 1.8, height: 1.8, length: 0.01, chamferRadius: 0)
             plane.firstMaterial?.diffuse.contents = UIColor.clear
             let planeNode = CubeNode(id: index, geometry: plane)
-//            planeNode.transform = SCNMatrix4MakeTranslation(minVec.x + (maxVec.x - minVec.x) / 2, minVec.y + (maxVec.y - minVec.y) / 2, -0.0005)
+            // Add the textNode to the plane and set its anchor point to be the middle of the box (last column, z-value)
             planeNode.addChildNode(textNode)
             planeNode.simdPivot = simd_float4x4([
                 simd_float4.init(x: 1, y: 0, z: 0, w: 0),
@@ -58,32 +61,29 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
                 simd_float4.init(x: 0, y: 0, z: -1.001, w: 1)
             ])
             
+            //Rotate the planes around their new center (origin node) according to their id
             switch index {
             case 0:
-                planeNode.rotation = SCNVector4(x: 0, y: 0, z: 0, w: 0)
-                
+                planeNode.simdRotation = simd_float4(x: 0, y: 0, z: 0, w: 0)
             case 1:
-                planeNode.rotation = SCNVector4(x: 0, y: 1, z: 0, w: .pi / 2)
-                
+                planeNode.simdRotation = simd_float4(x: 0, y: 1, z: 0, w: .pi / 2)
             case 2:
-                planeNode.rotation = SCNVector4(x: 0, y: 1, z: 0, w: .pi)
-
+                planeNode.simdRotation = simd_float4(x: 0, y: 1, z: 0, w: .pi)
             case 3:
-                planeNode.rotation = SCNVector4(x: 0, y: 1, z: 0, w: .pi * 3 / 2)
-
+                planeNode.simdRotation = simd_float4(x: 0, y: 1, z: 0, w: .pi * 3 / 2)
             case 4:
-                planeNode.rotation = SCNVector4(x: 1, y: 0, z: 0, w: -.pi / 2)
-
+                planeNode.simdRotation = simd_float4(x: 1, y: 0, z: 0, w: -.pi / 2)
             case 5:
-                planeNode.rotation = SCNVector4(x: 1, y: 0, z: 0, w: .pi / 2)
-
+                planeNode.simdRotation = simd_float4(x: 1, y: 0, z: 0, w: .pi / 2)
             default: break
             }
             
+            //Add plane to root node (NOT to the box to preserve world geometry)
             scene.rootNode.addChildNode(planeNode)
 
         }
         
+        //Create hit vectors that (further down) test which nodes are at the top, the bottom, the left and the right of the cube to rotate them
         context.coordinator.hitVectors = [
             (.left, SCNVector3(x: -10, y: 0, z: 0)),
             (.right, SCNVector3(x: 10, y: 0, z: 0)),
@@ -91,6 +91,7 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
             (.up, SCNVector3(x: 0, y: 10, z: 0))
         ]
         
+        // Save the original transforms of the nodes at the top, the bottom, the left and the right to later apply them to the nodes found by the hit vectors
         context.coordinator.transforms = .init(uniqueKeysWithValues: scene.rootNode.childNodes.filter { $0.name == nil && ($0 as! CubeNode).id != 0 && ($0 as! CubeNode).id != 2 }.map { node in
             guard let cubeNode = node as? CubeNode else { fatalError() }
             var direction : Direction = .undefined
@@ -113,6 +114,7 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
             return (direction, targetTransform)
         })
         
+        //Create a light source to actually see 3D shapes
         let light = SCNLight()
         light.intensity = 1000
         light.type = .omni
@@ -121,6 +123,7 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
         lightNode.position = SCNVector3(x: 4, y: 4, z: 8)
         lightNode.name = "Light"
         
+        // Install four distinct swipe gesture recognizers for every direction
         let directions : [UISwipeGestureRecognizer.Direction] = [.down, .left, .right, .up]
         directions.forEach { direction in
             let swipeGesture = UISwipeGestureRecognizer()
@@ -137,20 +140,33 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
         return sceneView
     }
     
-    
+    //Called whenever a property marked with "@State" changes
     func updateUIView(_ uiView: SCNView, context: UIViewRepresentableContext<SceneKitObjectRepresentable>) {
         
+        //Get the cube from the SCNView
         guard let box = uiView.scene?.rootNode.childNodes.filter({ $0.name == "Box" }).first else { return }
         
-        let action = SCNAction.rotate(by: rotationValue, around: rotationAxis, duration: 0.3)
+        //Make rotation action for the cube and the plane nodes (with the text attached)
+        let action = SCNAction.rotate(by: rotationValue, around: rotationAxis, duration: animationDuration)
         action.timingMode = .easeInEaseOut
         
+        //Disable swipes until the cube has settled to prevent faulty plane rotations
+        uiView.isUserInteractionEnabled = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + (animationDuration + 0.25)) {
+            uiView.isUserInteractionEnabled = true
+        }
+        
+        //Run the actions on both the cube and the plane nodes
         uiView.scene?.rootNode.childNodes.filter { $0.name == nil }.forEach { $0.runAction(action) }
         box.runAction(action) {
-            print("----------- NEW ROTATION ------------")
+            //Completion handler (after rotation):
+            //Reset the rotation value and rotation axis
             rotationValue = 0
             rotationAxis = .init(x: 0, y: 0, z: 0)
             
+            //Perform a hit test in all four directions from the center of the cube (to the left, right, top and bottom)
+            //to check which nodes are currently at those positions, and set their transforms to be equal to those of the nodes who
+            //were originally there. This prevents cube faces facing the wrong way.
             context.coordinator.hitVectors.forEach { (direction, vector) in
                 let origin = SCNVector3(x: 0, y: 0, z: 0)
                 guard
@@ -159,11 +175,9 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
                     let targetTransform = context.coordinator.transforms[direction]
                 else { return }
                 
-                node.simdTransform = targetTransform
-                
-//                node.simdTransform.columns.0 = targetTransform.columns.0
-//                node.simdTransform.columns.1 = targetTransform.columns.1
-//                node.simdTransform.columns.2 = targetTransform.columns.2
+                DispatchQueue.main.async {
+                    node.simdTransform = targetTransform
+                }
             }
         }
     }
@@ -206,17 +220,9 @@ struct SceneKitObjectRepresentable: UIViewRepresentable {
     enum Direction {
         case left, right, up, down, front, back, undefined
     }
-    
-    func cloneNode(node: CubeNode, with id: Int) -> CubeNode {
-        let clone = node.clone()
-        clone.removeFromParentNode()
-        clone.id = id
-        clone.childNodes.forEach { $0.removeFromParentNode()}
-        clone.geometry?.materials.first?.diffuse.contents = UIColor.red
-        return clone
-    }
 }
 
+//Subclass SCNNode to enable it to hold an 'id' property for later identification
 class CubeNode: SCNNode {
     
     var id : Int
